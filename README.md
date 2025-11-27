@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-v0.29-blue.svg)
+![Version](https://img.shields.io/badge/version-v0.29.1-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Termux-lightgrey.svg)
@@ -150,7 +150,7 @@ python vritraai.py
 ## 📋 Requirements
 
 ### Core Dependencies (Required)
-- `openai>=0.28.0` - OpenAI API client for OpenRouter integration
+- `openai==0.28.0` - OpenAI API client for OpenRouter integration
 - `requests>=2.28.0` - HTTP library for API requests
 - `prompt-toolkit>=3.0.0` - Advanced terminal UI library
 
@@ -1092,7 +1092,7 @@ Owner, **Vritra Security Organization**
 
 - **Original Project**: Built from scratch by Alex Butler
 - **Organization**: Vritra Security Organization
-- **Version**: v0.29
+- **Version**: v0.29.1
 - **Status**: Active Development
 
 ### Acknowledgments

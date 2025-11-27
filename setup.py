@@ -20,7 +20,7 @@ with open("requirements.txt", "r", encoding="utf-8") as f:
 
 setup(
     name="vritraai",
-    version="0.29.0",
+    version="0.29.1",
     author="Alex Butler",
     author_email="contact@vritrasec.com",
     description="An intelligent, AI-enhanced terminal shell with advanced features, beautiful theming, and powerful command execution capabilities",
@@ -35,7 +35,7 @@ setup(
     },
     py_modules=["vritraai", "config_manager", "config"],
     install_requires=[
-        "openai>=0.28.0",
+        "openai==0.28.0",
         "requests>=2.28.0",
         "prompt-toolkit>=3.0.0",
         "rich>=13.0.0",

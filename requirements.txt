@@ -12,7 +12,7 @@
 # Compatible with both v0.x and v1.x (v1.x has backward compatibility layer)
 # For v0.x API: use openai<1.0.0
 # For v1.x API: use openai>=1.0.0 (may require code updates)
-openai>=0.28.0
+openai==0.28.0
 
 # HTTP library for API requests
 # Used for Gemini API calls, OpenRouter API, and general HTTP requests

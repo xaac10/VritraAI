@@ -80,7 +80,7 @@ except ImportError:
 
 # --- Configuration ---
 # Central version info (change here to update everywhere)
-VRITRA_VERSION = "v0.29"
+VRITRA_VERSION = "v0.29.1"
 
 # Professional config directory structure
 CONFIG_DIR = os.path.expanduser("~/.config-vritrasecz/vritraai")
