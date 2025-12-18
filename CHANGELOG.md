@@ -2,9 +2,49 @@
 
 All notable changes to VritraAI will be documented in this file.
 
+## [0.30.0] - 2024-12-18
+
+### Added
+- **Sudo command support** - Full sudo command execution with color preservation
+- **Sudo command validation** - Checks if commands exist before execution
+- **Sudo autocompletion** - 30+ common sudo commands available via tab completion
+- **Sudo security warnings** - Detects and warns about dangerous sudo operations (rm -rf, dd, etc.)
+- **Parent directory path support** - Added support for `..` standalone command and `../folder`, `../../folder`, etc.
+- **Home directory expansion** - Added support for `~`, `~/Documents`, `~/script.py`
+- **Directory navigation** - Automatic directory change when using `./folder` or `/path/to/folder`
+- **Error recovery mode** - AI-powered error recovery for missing files and paths
+- **Similar file suggestions** - Fuzzy matching suggestions when files/paths don't exist
+- **Visual feedback** - Enhanced visual feedback for directory changes and script execution
+- **Chain command blocking** - Blocks dangerous commands (sudo, bash, path commands) in chain commands
+- **Path validation warnings** - Detects suspicious path traversal patterns (more than 3 `../`)
+
+### Fixed
+- **Sudo color output** - Sudo commands now preserve colors (ls colors, grep colors, etc.)
+- **Sudo output capture** - Fixed sudo command output capture for `explain_last` functionality - now properly logs actual command output instead of generic messages
+- **Dangerous command detection** - Fixed detection for `sudo rm -rf *` and similar dangerous patterns
+- **Path handling** - Fixed `~` standalone command (now works without `/`) and `..` standalone command
+- **File execution** - Fixed interactive script execution for `./test.py` and `./test.sh`
+- **Python error recovery** - Fixed error recovery for `python xyz.py` when file doesn't exist
+
+### Changed
+- **Default model** - Changed default Gemini model from "gemini-2.0-flash" to "gemini-flash-latest" (gf4)
+- **Sudo execution** - Sudo commands now run in bash shell with environment preservation
+- **Command blocking** - Enhanced blocking of shell commands and dangerous operations
+
+### Improved
+- **Sudo handling** - Complete rewrite of sudo command handling with security features
+- **Error messages** - More informative error messages with specific suggestions for different file types
+- **Command validation** - Better validation before command execution (checks command existence and syntax)
+- **Security** - Enhanced security checks for dangerous operations
+- **File execution** - Restricted to only `.py` and `.sh` files with strict validation
+- **Shell command blocking** - Blocked all shell commands except `bash` (with restrictions)
+- **Bash command restrictions** - Only allows `bash script.sh`, blocks `bash` alone and in chain commands
+- **VritraAI command blocking** - Prevents launching VritraAI inside VritraAI shell
+
 ## [0.29.5] - 2025-12-01
 
 ### Added
+- **Safe mode command** - Introduced `safe_mode` command for enhanced security and command validation
 - Smart interactive command detection with comprehensive pattern matching
 - Enhanced error recovery system with AI-powered suggestions
 - Traceback sanitization to improve AI error analysis accuracy
@@ -84,6 +124,7 @@ All notable changes to VritraAI will be documented in this file.
 
 ---
 
+[0.30.0]: https://github.com/VritraSecz/VritraAI/compare/v0.29.5...v0.30.0
 [0.29.5]: https://github.com/VritraSecz/VritraAI/compare/v0.29.1...v0.29.5
 [0.29.1]: https://github.com/VritraSecz/VritraAI/compare/v0.29.0...v0.29.1
 [0.29.0]: https://github.com/VritraSecz/VritraAI/releases/tag/v0.29.0

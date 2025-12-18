@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     "api_key": "",
     "gemini_api_key": "",
     "api_base": "gemini",  # "openrouter" or "gemini"
-    "model": "gemini-2.0-flash",
+    "model": "gemini-flash-latest",
     "ai_enabled": False,
     
     # UI Configuration
@@ -309,7 +309,7 @@ config = load_config()
 API_KEY = config.get("api_key", "")
 GEMINI_API_KEY = config.get("gemini_api_key", "")
 API_BASE = config.get("api_base", "gemini")
-MODEL = config.get("model", "gemini-2.0-flash")
+MODEL = config.get("model", "gemini-flash-latest")
 
 # Export main functions for external use
 __all__ = ['load_config', 'save_config', 'get_config_value', 'set_config_value', 'reset_config', 

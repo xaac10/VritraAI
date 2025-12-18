@@ -36,7 +36,7 @@ class ConfigurationManager:
             "api_key": "",
             "gemini_api_key": "",
             "api_base": "gemini",
-            "model": "gemini-2.0-flash",
+            "model": "gemini-flash-latest",
             "ai_enabled": False,
             
             # UI Configuration

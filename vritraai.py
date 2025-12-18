@@ -55,7 +55,7 @@ try:
     API_KEY = current_config.get("api_key", "")
     GEMINI_API_KEY = current_config.get("gemini_api_key", "")
     API_BASE = current_config.get("api_base", "gemini")
-    MODEL = current_config.get("model", "gemini-2.0-flash")
+    MODEL = current_config.get("model", "gemini-flash-latest")
     
     print(f"[CONFIG] Configuration loaded: API_BASE={API_BASE}, Theme={current_config.get('theme')}, Prompt={current_config.get('prompt_style')}")
     
@@ -68,7 +68,7 @@ except ImportError:
             API_KEY = current_config.get("api_key", API_KEY or "")
             GEMINI_API_KEY = current_config.get("gemini_api_key", GEMINI_API_KEY or "")
             API_BASE = current_config.get("api_base", API_BASE or "gemini")
-            MODEL = current_config.get("model", MODEL or "gemini-2.0-flash")
+            MODEL = current_config.get("model", MODEL or "gemini-flash-latest")
         config_manager = None
         print("⚠️ Using legacy configuration system")
     except ImportError:
@@ -82,7 +82,7 @@ except ImportError:
 
 # --- Configuration ---
 # Central version info (change here to update everywhere)
-VRITRA_VERSION = "v0.29.5"
+VRITRA_VERSION = "v0.30.0"
 
 def sync_config_version(config_dict: dict) -> dict:
     """Sync the _config_version field in config dictionary with VRITRA_VERSION."""
@@ -110,14 +110,15 @@ except Exception:
 
 # What's New data for current version (hardcoded - only main highlights)
 WHATS_NEW_HIGHLIGHTS = [
-    "Fixed interactive commands (vim, nano, python, etc.) - they now work properly without getting stuck",
-    "Improved error recovery - system commands now show helpful recovery options with multiple fix suggestions",
-    "Better AI error analysis - AI now focuses on your actual errors, not shell internals",
-    "Enhanced history command - now shows commands with timestamps, supports head/tail piping, and prevents duplicates",
-    "Improved path detection - automatically expands ~ and environment variables for better file/directory access",
-    "Enhanced AI context - all AI requests now include full system info, directory structure, and project details",
-    "Improved OS info detection - robust error handling for Termux/Android environments with fallback methods",
-    "Better command validation - detects and rejects invalid flags/arguments before launching interactive shell"
+    "Sudo command support - Full sudo execution with color preservation and security warnings",
+    "Enhanced path handling - Support for `..`, `~`, `../folder`, and automatic directory navigation",
+    "Improved file execution - Better handling of Python and bash scripts with interactive support",
+    "Sudo autocompletion - 30+ common sudo commands available via tab completion",
+    "Sudo dangerous command detection - Warns about risky sudo operations (sudo rm -rf, sudo dd, etc.) with confirmation prompts",
+    "Sudo output capture - Sudo commands now properly capture output for explain_last functionality",
+    "Enhanced error recovery - AI-powered suggestions for missing files and paths with fuzzy matching",
+    "Chain command blocking - Blocks dangerous commands (sudo, bash, path commands) in chain operations",
+    "Better error messages - Detailed, actionable error messages with specific suggestions for different scenarios"
 ]
 
 # Professional config directory structure
@@ -1957,8 +1958,13 @@ def is_interactive_command(command: str) -> bool:
     # If it has pipes or redirects, it's less likely to be interactive
     has_pipes = '|' in command or '>' in command or '<' in command or '>>' in command
     
-    # Return True if it matches interactive patterns and doesn't have pipes/redirects
-    return (has_interactive_flag or has_interactive_pattern) and not has_pipes
+    # Python/node/ruby with file arguments are not interactive (they're script execution)
+    # Check if command is "python file.py" or similar (has a file argument)
+    script_execution_patterns = ['python ', 'python3 ', 'node ', 'nodejs ', 'ruby ', 'perl ']
+    is_script_execution = any(pattern in command_lower and len(command.split()) > 1 for pattern in script_execution_patterns)
+    
+    # Return True if it matches interactive patterns, doesn't have pipes/redirects, and is not script execution
+    return (has_interactive_flag or has_interactive_pattern) and not has_pipes and not is_script_execution
 
 def is_ai_command(cmd: str) -> bool:
     """Check if a command is an AI/internal VritraAI command that should not be logged."""
@@ -1998,6 +2004,23 @@ def should_log_command(command: str) -> bool:
     
     # Don't log AI commands
     if is_ai_command(command):
+        return False
+    
+    # Special handling for sudo commands - check the command after sudo
+    if first_word_lower == "sudo":
+        sudo_parts = command.split(None, 1)
+        if len(sudo_parts) > 1:
+            actual_command = sudo_parts[1]
+            # Recursively check if the actual command should be logged
+            # But don't check interactivity for sudo commands (they're handled specially)
+            if is_ai_command(actual_command):
+                return False
+            # Check if the actual command is a system command or whitelisted built-in
+            actual_first_word = actual_command.split()[0] if actual_command.split() else ""
+            if shutil.which(actual_first_word):
+                return True
+            if actual_first_word.lower() in LOGGABLE_BUILTIN_COMMANDS:
+                return True
         return False
     
     # Don't log interactive commands
@@ -4721,6 +4744,29 @@ class SmartCommandCompleter(Completer):
             'ls': ['-la', '-la | grep '],
             'grep': ['-R "" .', '"pattern" *.py'],
             'python': ['-m unittest', 'script.py'],
+            # IMPROVEMENT #3: Sudo autocompletion enhancements
+            'sudo': [
+                'apt update', 'apt upgrade', 'apt install ', 'apt remove ',
+                'systemctl start ', 'systemctl stop ', 'systemctl restart ', 'systemctl status ',
+                'service ', 'service  start', 'service  stop', 'service  restart',
+                'systemctl enable ', 'systemctl disable ',
+                'ls -la', 'ls -la /', 'ls -la /etc', 'ls -la /var',
+                'cat /etc/passwd', 'cat /etc/group',
+                'chmod +x ', 'chmod 755 ', 'chown -R ',
+                'mkdir -p ', 'rm -rf ', 'cp -r ', 'mv ',
+                'nano /etc/', 'vim /etc/', 'vi /etc/',
+                'reboot', 'shutdown -h now', 'shutdown -r now',
+                'docker ps', 'docker start ', 'docker stop ',
+                'journalctl -xe', 'journalctl -u ',
+                'ufw allow ', 'ufw deny ', 'ufw status',
+                'iptables -L', 'netstat -tulpn',
+                'passwd ', 'useradd ', 'userdel ', 'usermod ',
+                'groupadd ', 'groupdel ',
+                'visudo', 'crontab -e', 'crontab -l',
+                'mount ', 'umount ', 'fdisk -l', 'df -h',
+                'tail -f /var/log/', 'tail -f /var/log/syslog',
+                'grep -r "" /etc/', 'find / -name ',
+            ],
         }
 
     def _ranked_commands(self) -> List[str]:
@@ -4794,11 +4840,17 @@ class SmartCommandCompleter(Completer):
 
         # Simple chaining suggestions for common tools ("git status", "ls -la", etc.)
         if len(words) == 1 and text.endswith(' '):
-            for suggestion in self.chaining_suggestions.get(base_cmd, []):
-                # Only insert the second token/fragment, not the whole command again
-                # e.g., user typed "git " → we offer "status", "diff", ...
-                second_part = suggestion
-                yield Completion(second_part, start_position=0)
+            suggestions = self.chaining_suggestions.get(base_cmd, [])
+            # IMPROVEMENT #3: Special handling for sudo - show suggestions after "sudo "
+            if base_cmd == 'sudo':
+                # For sudo, show all suggestions as they include the full command
+                for suggestion in suggestions:
+                    yield Completion(suggestion, start_position=0)
+            else:
+                # For other commands, show suggestions normally
+                for suggestion in suggestions:
+                    second_part = suggestion
+                    yield Completion(second_part, start_position=0)
             return
 
         # Fallback: no special handling, but still try file paths as a generic hint
@@ -5235,6 +5287,297 @@ def execute_command(command: str):
     command = command.strip()
     original_command = command
     
+    # Block commands starting with "vritraai" to prevent launching vritraai inside vritraai
+    first_word = command.split()[0] if command.split() else ""
+    if first_word.lower().startswith("vritraai"):
+        print_with_rich("⚠️  Warning: Cannot launch VritraAI inside VritraAI shell!", "error")
+        print_with_rich("   This would cause shell conflicts and crashes.", "warning")
+        print_with_rich("   Please exit VritraAI first, then launch it from your regular terminal.", "info")
+        return
+    
+    # Handle sudo commands - execute directly to system, block in chain commands
+    if first_word.lower() == "sudo":
+        # Block sudo in chain commands
+        if "&&" in command or ";" in command:
+            print_with_rich("⚠️  Warning: 'sudo' command in chain commands is blocked!", "error")
+            print_with_rich("   Execute sudo commands separately for safety.", "info")
+            return
+        
+        # Check if sudo exists on the system
+        if not shutil.which("sudo"):
+            print_with_rich("⚠️  Warning: 'sudo' command is not available on your system!", "error")
+            print_with_rich("   This system doesn't have sudo installed or configured.", "warning")
+            print_with_rich("   sudo is typically available on Linux systems.", "info")
+            print_with_rich("   On mobile devices or non-Linux systems, sudo may not be available.", "info")
+            session.add_command(command, error="sudo command not available on this system")
+            return
+        
+        # Use bash shell only (universal, available on most systems)
+        # bash is more universal than zsh which requires manual installation on some systems
+        if shutil.which("bash"):
+            user_shell = shutil.which("bash")
+        else:
+            # Fallback to /bin/bash if which doesn't find it (shouldn't happen on most systems)
+            user_shell = '/bin/bash'
+        
+        # Prepare environment with color settings preserved
+        # sudo by default runs in a clean environment, so we need to preserve color-related vars
+        env = os.environ.copy()
+        # Ensure color-related environment variables are set
+        env['CLICOLOR'] = '1'
+        env['CLICOLOR_FORCE'] = '1'
+        # Preserve TERM for proper color support
+        if 'TERM' not in env:
+            env['TERM'] = os.environ.get('TERM', 'xterm-256color')
+        # Preserve LS_COLORS if it exists, or generate it if missing
+        if 'LS_COLORS' in os.environ:
+            env['LS_COLORS'] = os.environ['LS_COLORS']
+        else:
+            # Try to get LS_COLORS from dircolors if available
+            try:
+                dircolors_result = subprocess.run(['dircolors', '-b'], capture_output=True, text=True, timeout=2)
+                if dircolors_result.returncode == 0:
+                    # Parse dircolors output to extract LS_COLORS
+                    for line in dircolors_result.stdout.split('\n'):
+                        if line.startswith('export LS_COLORS='):
+                            ls_colors_value = line.split('=', 1)[1].strip().strip("'\"")
+                            env['LS_COLORS'] = ls_colors_value
+                            break
+            except Exception:
+                # If dircolors fails, set a basic LS_COLORS
+                env['LS_COLORS'] = 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'
+        # Preserve other color-related variables
+        for key in ['LSCOLORS', 'COLORTERM', 'FORCE_COLOR']:
+            if key in os.environ:
+                env[key] = os.environ[key]
+        
+        # Modify command to use sudo -E to preserve environment
+        # Extract the command after sudo
+        sudo_parts = command.split(None, 1)
+        if len(sudo_parts) > 1:
+            # Use sudo -E to preserve environment variables (especially color settings)
+            actual_command = sudo_parts[1]  # Command after sudo
+            
+            # IMPROVEMENT #1 & #8: Validate command exists and syntax before execution
+            command_parts = actual_command.split()
+            if command_parts:
+                cmd_name = command_parts[0]
+                
+                # IMPROVEMENT #5: Check for dangerous sudo operations
+                command_lower = actual_command.lower()
+                command_words = command_lower.split()
+                
+                # Check for dangerous rm commands (rm -rf, rm -rfv, rm -r, etc.)
+                # Check the original command string first for patterns like "rm -rf*" or "rm -rfv *"
+                if command_lower.startswith('rm '):
+                    # Check for recursive delete flags in the command string
+                    rm_recursive_patterns = ['rm -r', 'rm -rf', 'rm -rfv', 'rm -r ', 'rm -rf ', 'rm -rfv ']
+                    has_recursive_flag = any(pattern in command_lower for pattern in rm_recursive_patterns)
+                    
+                    if has_recursive_flag:
+                        # Check for dangerous targets: *, ., /, or system paths
+                        dangerous_patterns = ['*', ' .', ' ./', ' /', '/home', '/usr', '/etc', '/var', '/opt', '/bin', '/sbin', '/lib', '/lib64']
+                        has_dangerous_target = any(pattern in actual_command for pattern in dangerous_patterns)
+                        
+                        # Also check if command ends with just flags (rm -rf without target is dangerous)
+                        if has_dangerous_target or command_lower.strip().endswith(('-r', '-rf', '-rfv', '-R', '-Rf', '-Rfv')):
+                            print_with_rich("⚠️  WARNING: Potentially dangerous sudo operation detected!", "error")
+                            print_with_rich(f"   Command: {actual_command}", "warning")
+                            print_with_rich("   This command will DELETE files recursively!", "error")
+                            print_with_rich("   This could cause data loss or system damage!", "error")
+                            if not confirm_action("Are you absolutely sure you want to proceed?"):
+                                print_with_rich("Command cancelled for safety.", "info")
+                                session.add_command(command, error="Dangerous command cancelled by user")
+                                return
+                
+                # Check for other dangerous commands
+                dangerous_sudo_patterns = [
+                    'dd if=', 'mkfs', 'fdisk', 'format', 'shutdown', 'reboot', 'halt',
+                    'chmod 777 /', 'chown -R root /', '> /dev/sd', 'mkfs.ext', 'mkfs.xfs',
+                    'chmod -R 777', 'chown -R root'
+                ]
+                for pattern in dangerous_sudo_patterns:
+                    if pattern in command_lower:
+                        print_with_rich("⚠️  WARNING: Potentially dangerous sudo operation detected!", "error")
+                        print_with_rich(f"   Command: {actual_command}", "warning")
+                        print_with_rich("   This command could cause data loss or system damage!", "error")
+                        if not confirm_action("Are you absolutely sure you want to proceed?"):
+                            print_with_rich("Command cancelled for safety.", "info")
+                            session.add_command(command, error="Dangerous command cancelled by user")
+                            return
+                
+                # Check if command exists (skip for shell built-ins and special commands)
+                shell_builtins = {'cd', 'export', 'source', 'alias', 'unalias', 'set', 'unset', 'echo', 'pwd', 'history', 'type', 'which'}
+                if cmd_name not in shell_builtins:
+                    if not shutil.which(cmd_name):
+                        print_with_rich(f"⚠️  Error: Command '{cmd_name}' not found!", "error")
+                        print_with_rich(f"   Cannot execute '{actual_command}' with sudo.", "warning")
+                        print_with_rich("   Please check the command name and try again.", "info")
+                        session.add_command(command, error=f"Command '{cmd_name}' not found")
+                        return
+                
+                # IMPROVEMENT #8: Basic syntax validation (check for common mistakes)
+                # Check for missing space between command and flag (e.g., "ls-l" instead of "ls -l")
+                if len(command_parts) > 1:
+                    second_part = command_parts[1]
+                    # Check if second part looks like a flag but is concatenated (starts with - but has no space before)
+                    if not second_part.startswith('-') and cmd_name.endswith('-'):
+                        # Might be a concatenated command-flag
+                        print_with_rich(f"⚠️  Warning: Possible syntax error detected!", "warning")
+                        print_with_rich(f"   Did you mean '{cmd_name} {second_part}' instead of '{cmd_name}{second_part}'?", "info")
+                        print_with_rich("   Please check your command syntax.", "info")
+                
+                # Add explicit color flags for common commands that support colors
+                # This ensures colors are shown even when TTY detection fails
+                # Add --color=always for ls if not already present
+                if cmd_name == 'ls' and '--color' not in actual_command and '--colour' not in actual_command:
+                    # Insert --color=always after 'ls'
+                    command_parts.insert(1, '--color=always')
+                    actual_command = ' '.join(command_parts)
+                # Add --color=always for grep if not already present
+                elif cmd_name == 'grep' and '--color' not in actual_command and '--colour' not in actual_command:
+                    command_parts.insert(1, '--color=always')
+                    actual_command = ' '.join(command_parts)
+            
+            # Use sudo -E to preserve environment variables
+            wrapped_command = f"sudo -E {actual_command}"
+        else:
+            wrapped_command = command
+        
+        # Execute sudo command directly to system without VritraAI interference
+        # Use user's shell explicitly to preserve colors and shell features
+        start_time = time.time()
+        captured_output = ""
+        try:
+            # Use Popen to capture output while still allowing password prompts
+            # Password prompts go to stderr, so we don't pipe stderr to allow them to display
+            # We only pipe stdout to capture command output
+            process = subprocess.Popen(
+                wrapped_command,
+                shell=True,
+                executable=user_shell,
+                env=env,
+                stdout=subprocess.PIPE,  # Capture stdout for logging
+                stderr=None,  # Don't pipe stderr - let password prompts display naturally
+                stdin=None,  # Keep stdin connected to terminal for password input
+                text=True,
+                bufsize=1  # Line buffered
+            )
+            
+            # Wait for process and capture stdout output
+            # Password prompts (stderr) will display naturally to terminal
+            stdout, _ = process.communicate()
+            result = type('obj', (object,), {'returncode': process.returncode})()
+            result.returncode = process.returncode
+            
+            # Print captured output to terminal (preserves colors if they're in the output)
+            if stdout:
+                print(stdout, end='')
+            
+            # Use captured stdout for logging
+            captured_output = stdout.strip() if stdout else ""
+            
+            execution_time = time.time() - start_time
+            
+            # Show execution time for longer commands
+            if execution_time > 1.0:
+                print_with_rich(f"⏱️  Completed in {execution_time:.2f}s", "info")
+            
+            # IMPROVEMENT #6: Better error messages for sudo failures
+            if result.returncode != 0:
+                # Use captured output for error messages
+                error_msg = captured_output.strip() if captured_output.strip() else ""
+                
+                # Provide specific error messages based on common sudo errors
+                if "password" in error_msg.lower() or "incorrect password" in error_msg.lower():
+                    print_with_rich("⚠️  Error: Authentication failed!", "error")
+                    print_with_rich("   Incorrect sudo password or authentication error.", "warning")
+                    print_with_rich("   Please check your password and try again.", "info")
+                elif "command not found" in error_msg.lower() or "no such file" in error_msg.lower():
+                    print_with_rich("⚠️  Error: Command not found!", "error")
+                    print_with_rich("   The command may not exist or is not in PATH.", "warning")
+                    print_with_rich("   Try running without sudo first to verify the command exists.", "info")
+                elif "permission denied" in error_msg.lower():
+                    print_with_rich("⚠️  Error: Permission denied!", "error")
+                    print_with_rich("   You may not have permission to execute this command.", "warning")
+                    print_with_rich("   Check if your user has sudo privileges for this command.", "info")
+                elif "timeout" in error_msg.lower():
+                    print_with_rich("⚠️  Error: Command timed out!", "error")
+                    print_with_rich("   The sudo command took too long to execute.", "warning")
+                    print_with_rich("   This may be due to password prompt timeout.", "info")
+                elif error_msg:
+                    print_with_rich(f"⚠️  Error: {error_msg}", "error")
+                else:
+                    print_with_rich(f"⚠️  Error: Command exited with code {result.returncode}", "error")
+                    print_with_rich("   The command failed but no error message was captured.", "warning")
+                
+                session.add_command(command, error=error_msg or f"Exited with code {result.returncode}")
+                # Log sudo command for explain_last functionality
+                if should_log_command(command):
+                    # Use captured output if available, otherwise use error message
+                    log_output = captured_output.strip() if captured_output.strip() else (error_msg or f"Exited with code {result.returncode}")
+                    log_last_command(command, log_output, result.returncode)
+            else:
+                session.add_command(command, "Command completed successfully")
+                # Log sudo command for explain_last functionality
+                if should_log_command(command):
+                    # Use captured output if available, otherwise use success message
+                    log_output = captured_output.strip() if captured_output.strip() else "Command completed successfully"
+                    log_last_command(command, log_output, 0)
+            return
+        except subprocess.TimeoutExpired:
+            print_with_rich("⚠️  Error: Command timed out!", "error")
+            print_with_rich("   The sudo command took too long to execute.", "warning")
+            print_with_rich("   This may be due to password prompt timeout or a hanging process.", "info")
+            session.add_command(command, error="Command timed out")
+            # Log sudo command for explain_last functionality
+            if should_log_command(command):
+                log_last_command(command, "Command timed out", 124)  # 124 is common timeout exit code
+            return
+        except KeyboardInterrupt:
+            print_with_rich("\n⚠️  Command interrupted by user (Ctrl+C)", "warning")
+            session.add_command(command, error="Interrupted by user")
+            # Log sudo command for explain_last functionality
+            if should_log_command(command):
+                log_last_command(command, "Interrupted by user", 130)  # 130 is SIGINT exit code
+            return
+        except Exception as e:
+            error_type = type(e).__name__
+            print_with_rich(f"⚠️  Error executing sudo command: {error_type}", "error")
+            print_with_rich(f"   {str(e)}", "warning")
+            print_with_rich("   Please check the command syntax and try again.", "info")
+            session.add_command(command, error=f"{error_type}: {str(e)}")
+            # Log sudo command for explain_last functionality
+            if should_log_command(command):
+                log_last_command(command, f"{error_type}: {str(e)}", 1)
+            return
+    
+    # Block shell commands except bash (and only allow bash with script files)
+    blocked_shells = {'zsh', 'sh', 'tsh', 'fish', 'csh', 'tcsh', 'ksh', 'dash', 'ash', 'mksh', 'yash', 'zsh', 'pwsh', 'powershell'}
+    cmd_lower = first_word.lower()
+    
+    # Check if it's a blocked shell command
+    if cmd_lower in blocked_shells:
+        print_with_rich(f"⚠️  Warning: '{first_word}' shell command is blocked for safety!", "error")
+        print_with_rich("   Shell commands can cause conflicts with VritraAI shell.", "warning")
+        print_with_rich("   Use 'bash <script_file>' to execute bash scripts instead.", "info")
+        return
+    
+    # Handle bash command - only allow if executing a script file
+    if cmd_lower == "bash":
+        parts = command.split()
+        if len(parts) < 2:
+            # bash without arguments - block it
+            print_with_rich("⚠️  Warning: 'bash' command without arguments is blocked!", "error")
+            print_with_rich("   Use 'bash <script_file>' to execute bash scripts.", "info")
+            return
+        # Check if it's in a chain command (has && or ;)
+        if "&&" in command or ";" in command:
+            print_with_rich("⚠️  Warning: 'bash' command in chain commands is blocked!", "error")
+            print_with_rich("   Execute bash scripts separately for safety.", "info")
+            return
+        # Allow bash script execution - continue to normal execution
+    
     # Handle multi-command with && or ;
     # Extract the first command to check if it's valid
     if "&&" in command or ";" in command:
@@ -5242,6 +5585,20 @@ def execute_command(command: str):
         import re
         first_part = re.split(r'[;&]', command)[0].strip()
         first_word = first_part.split()[0] if first_part.split() else ""
+
+        # Block ~, ~/, ./, ../, .., and / in chain commands
+        if (first_word == "~" or first_word == ".." or 
+            first_word.startswith("./") or first_word.startswith("../") or 
+            first_word.startswith("/") or first_word.startswith("~/")):
+            print_with_rich("⚠️  Warning: Path commands (~, ~/, ./, ../, .., /) in chain commands are blocked!", "error")
+            print_with_rich("   Execute files/folders separately for safety.", "info")
+            return
+        
+        # Block sudo in chain commands
+        if first_word.lower() == "sudo":
+            print_with_rich("⚠️  Warning: 'sudo' command in chain commands is blocked!", "error")
+            print_with_rich("   Execute sudo commands separately for safety.", "info")
+            return
 
         if not is_valid_command(first_word):
             print_with_rich(f'⚠️ Unknown "{first_word}" command detected in multicommand.', "error")
@@ -5273,6 +5630,33 @@ def execute_command(command: str):
             for cmd_str in commands:
                 cmd_word = cmd_str.split()[0] if cmd_str.split() else ""
                 
+                # Block ~, ~/, ./, ../, .., and / in chain commands
+                if (cmd_word == "~" or cmd_word == ".." or 
+                    cmd_word.startswith("./") or cmd_word.startswith("../") or 
+                    cmd_word.startswith("/") or cmd_word.startswith("~/")):
+                    print_with_rich("⚠️  Warning: Path commands (~, ~/, ./, ../, .., /) in chain commands are blocked!", "error")
+                    print_with_rich("   Execute files/folders separately for safety.", "info")
+                    return
+                
+                # Block bash in chain commands
+                if cmd_word.lower() == "bash":
+                    print_with_rich("⚠️  Warning: 'bash' command in chain commands is blocked!", "error")
+                    print_with_rich("   Execute bash scripts separately for safety.", "info")
+                    return
+                
+                # Block sudo in chain commands
+                if cmd_word.lower() == "sudo":
+                    print_with_rich("⚠️  Warning: 'sudo' command in chain commands is blocked!", "error")
+                    print_with_rich("   Execute sudo commands separately for safety.", "info")
+                    return
+                
+                # Block other shell commands in chain commands
+                blocked_shells = {'zsh', 'sh', 'tsh', 'fish', 'csh', 'tcsh', 'ksh', 'dash', 'ash', 'mksh', 'yash', 'pwsh', 'powershell'}
+                if cmd_word.lower() in blocked_shells:
+                    print_with_rich(f"⚠️  Warning: '{cmd_word}' shell command is blocked in chain commands!", "error")
+                    print_with_rich("   Shell commands can cause conflicts with VritraAI shell.", "warning")
+                    return
+                
                 # Check if first word is system command or whitelisted
                 is_system_command = shutil.which(cmd_word) is not None
                 is_whitelisted = cmd_word in allowed_builtins
@@ -5303,6 +5687,170 @@ def execute_command(command: str):
     parts = command.split()
     cmd = parts[0]
     args = parts[1:]
+    
+    # Special handling for relative (./, ../, ..) and absolute (/, ~) paths
+    # This must be checked before aliases to properly handle file/folder execution
+    if cmd.startswith("./") or cmd.startswith("../") or cmd == ".." or cmd.startswith("/") or cmd.startswith("~/") or cmd == "~":
+        # Path validation: Check for suspicious path traversal patterns BEFORE processing
+        # Count ../ in the original command string (before normalization)
+        if "../" in cmd:
+            parent_dir_count = cmd.count("../")
+            if parent_dir_count > 3:
+                print_with_rich("⚠️  Warning: Suspicious path traversal detected!", "error")
+                print_with_rich(f"   Too many parent directory references ({parent_dir_count} '../' found) in path.", "warning")
+                print_with_rich("   This may be a security risk. Please use a more direct path.", "info")
+                print_with_rich("   Maximum allowed: 3 levels (../../../)", "info")
+                session.add_command(command, error="Suspicious path traversal detected")
+                return
+        
+        target_path = cmd
+        # Expand to full path if needed
+        if cmd == "..":
+            # Handle just .. (parent directory)
+            target_path = os.path.normpath(os.path.join(os.getcwd(), ".."))
+        elif cmd.startswith("./"):
+            target_path = os.path.join(os.getcwd(), cmd[2:])
+        elif cmd.startswith("../"):
+            # Handle parent directory paths (../folder, ../../folder, etc.)
+            target_path = os.path.normpath(os.path.join(os.getcwd(), cmd))
+        elif cmd == "~":
+            # Handle just ~ (home directory) - must check exact match first
+            target_path = os.path.expanduser(cmd)
+        elif cmd.startswith("~/"):
+            # Expand home directory (~/Documents/file.py)
+            target_path = os.path.expanduser(cmd)
+        # For absolute paths starting with /, use as-is
+        
+        # Check if path exists
+        if os.path.exists(target_path):
+            # Check if it's a directory
+            if os.path.isdir(target_path):
+                # Change directory to the folder
+                print_with_rich("📁 Changing directory...", "info")
+                try:
+                    os.chdir(target_path)
+                    new_cwd = os.getcwd()
+                    print_with_rich(f"✅ Changed directory to: {new_cwd}", "success")
+                    session.add_command(command, f"Changed directory to {new_cwd}")
+                    return
+                except Exception as e:
+                    print_with_rich(f"⚠️  Error changing directory: {e}", "error")
+                    session.add_command(command, error=str(e))
+                    return
+            
+            # It's a file - check if it's allowed (.py or .sh)
+            elif os.path.isfile(target_path):
+                # Only allow Python and bash files - strict check for exact extensions
+                file_ext = os.path.splitext(target_path)[1].lower()
+                # Check if file ends with exactly .py or .sh (not .pyc, .pyqw, etc.)
+                if not (target_path.lower().endswith('.py') or target_path.lower().endswith('.sh')):
+                    print_with_rich(f"⚠️  Warning: Only Python (.py) and bash (.sh) files can be executed with './', '../', '/', or '~/'", "error")
+                    print_with_rich(f"   File '{target_path}' has extension '{file_ext}' which is not allowed.", "warning")
+                    
+                    # Better error messages for different file types
+                    file_name = os.path.basename(target_path)
+                    suggestions = {
+                        '.txt': f"Use 'read_file {file_name}' or 'cat {file_name}' to read it",
+                        '.json': f"Use 'read_file {file_name}' to view it",
+                        '.md': f"Use 'read_file {file_name}' to view it",
+                        '.yml': f"Use 'read_file {file_name}' to view it",
+                        '.yaml': f"Use 'read_file {file_name}' to view it",
+                        '.xml': f"Use 'read_file {file_name}' to view it",
+                        '.html': f"Use 'read_file {file_name}' to view it",
+                        '.css': f"Use 'read_file {file_name}' to view it",
+                        '.js': f"Use 'read_file {file_name}' to view it or 'node {file_name}' to run it",
+                        '.ts': f"Use 'read_file {file_name}' to view it",
+                    }
+                    
+                    suggestion = suggestions.get(file_ext, f"Use 'read_file {file_name}' to view it or appropriate command for this file type")
+                    print_with_rich(f"   💡 {suggestion}", "info")
+                    print_with_rich("   For bash scripts: 'bash <script_file>' | For Python: 'python <script_file>'", "info")
+                    return
+                
+                # Execute the file directly using subprocess
+                # For Python files, explicitly use python command for better interactive handling
+                file_name = os.path.basename(target_path)
+                if file_ext == '.py':
+                    print_with_rich(f"▶️  Executing Python script: {file_name}...", "info")
+                else:
+                    print_with_rich(f"▶️  Executing bash script: {file_name}...", "info")
+                
+                start_time = time.time()
+                try:
+                    if file_ext == '.py':
+                        # For Python files, use explicit python command for better interactive support
+                        python_cmd = f"python {command}" if not command.startswith("python") else command
+                        result = subprocess.run(python_cmd, shell=True, capture_output=False)
+                    else:
+                        # For bash files, execute with shell=True to handle shebangs properly
+                        # Don't capture output to allow scripts to run interactively
+                        result = subprocess.run(command, shell=True, capture_output=False)
+                    
+                    execution_time = time.time() - start_time
+                    
+                    # Show execution time for longer commands
+                    if execution_time > 1.0:
+                        print_with_rich(f"⏱️  Completed in {execution_time:.2f}s", "info")
+                    
+                    if result.returncode != 0:
+                        print_with_rich(f"Command exited with code {result.returncode}", "warning")
+                        session.add_command(command, error=f"Exited with code {result.returncode}")
+                    else:
+                        session.add_command(command, "Command completed successfully")
+                    return
+                except Exception as e:
+                    print_with_rich(f"Error executing file: {e}", "error")
+                    session.add_command(command, error=str(e))
+                    return
+        else:
+            # Path doesn't exist - suggest similar files/folders and launch error recovery mode
+            error_msg = f"Path '{target_path}' not found"
+            print_with_rich(f"⚠️  Error: {error_msg}!", "error")
+            
+            # Suggest similar files/folders in the current directory
+            try:
+                current_dir = os.path.dirname(target_path) if os.path.dirname(target_path) else os.getcwd()
+                search_name = os.path.basename(target_path)
+                
+                if os.path.exists(current_dir):
+                    similar_items = []
+                    try:
+                        for item in os.listdir(current_dir):
+                            # Use fuzzy matching to find similar names
+                            import difflib
+                            similarity = difflib.SequenceMatcher(None, search_name.lower(), item.lower()).ratio()
+                            if similarity > 0.6:  # 60% similarity threshold
+                                item_path = os.path.join(current_dir, item)
+                                item_type = "📁" if os.path.isdir(item_path) else "📄"
+                                similar_items.append((item, similarity, item_type))
+                    except (PermissionError, OSError):
+                        pass
+                    
+                    # Sort by similarity and show top 3
+                    if similar_items:
+                        similar_items.sort(key=lambda x: x[1], reverse=True)
+                        print_with_rich("   💡 Did you mean one of these?", "info")
+                        for item, similarity, item_type in similar_items[:3]:
+                            print_with_rich(f"      {item_type} {item} ({(similarity*100):.0f}% similar)", "default")
+            except Exception:
+                pass  # Silently fail if suggestion fails
+            
+            session.add_command(command, error=error_msg)
+            
+            # Launch error recovery mode if AI is enabled
+            if AI_ENABLED:
+                error = FileNotFoundError(error_msg)
+                should_retry = handle_error_with_recovery(
+                    error, 
+                    context=f"Command: {command}\nTrying to access path: {target_path}", 
+                    show_suggestion=True, 
+                    auto_mode=False
+                )
+                if should_retry:
+                    # Retry the command
+                    execute_command(command)
+                    return
+            return
     
     if cmd in ALIASES:
         command = ALIASES[cmd] + (" " + " ".join(args) if args else "")
@@ -5482,6 +6030,36 @@ def execute_command(command: str):
         missing_files_command(args)
     elif cmd == "project_optimize":
         project_optimize_command(args)
+    elif cmd == "bash" and args:
+        # Handle bash script execution - treat as interactive to handle input properly
+        script_file = args[0]
+        # Check if script file exists
+        if not os.path.exists(script_file):
+            print_with_rich(f"⚠️  Error: Script file '{script_file}' not found!", "error")
+            session.add_command(command, error=f"Script file '{script_file}' not found")
+            return
+        
+        # Execute bash script - always treat as interactive to handle input
+        start_time = time.time()
+        try:
+            # Execute with shell=True and no output capture to allow interactive scripts
+            result = subprocess.run(command, shell=True, capture_output=False)
+            execution_time = time.time() - start_time
+            
+            # Show execution time for longer commands
+            if execution_time > 1.0:
+                print_with_rich(f"⏱️  Completed in {execution_time:.2f}s", "info")
+            
+            if result.returncode != 0:
+                print_with_rich(f"Command exited with code {result.returncode}", "warning")
+                session.add_command(command, error=f"Exited with code {result.returncode}")
+            else:
+                session.add_command(command, "Command completed successfully")
+            return
+        except Exception as e:
+            print_with_rich(f"Error executing bash script: {e}", "error")
+            session.add_command(command, error=str(e))
+            return
     elif is_command(cmd):
         # Special handling for piped commands with grep
         if "|" in command and "grep" in command:
@@ -5513,6 +6091,30 @@ def execute_command(command: str):
                 # Use simple subprocess.run() like testt.py - this works for all interactive commands
                 result = subprocess.run(command, shell=True)
                 execution_time = time.time() - start_time
+                
+                # Check for file not found errors even in interactive mode (for Python commands)
+                if result.returncode != 0 and cmd.lower() in ['python', 'python3']:
+                    # Try to capture error for Python file not found errors
+                    temp_result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=5)
+                    if temp_result.stderr and any(phrase in temp_result.stderr.lower() for phrase in [
+                        "can't open file", "no such file", "errno 2", "file not found"
+                    ]):
+                        error_text = temp_result.stderr
+                        actual_error_msg = error_text.strip()
+                        session.add_command(command, error=actual_error_msg)
+                        
+                        # Launch error recovery mode for file not found
+                        if AI_ENABLED:
+                            error = FileNotFoundError(actual_error_msg)
+                            should_retry = handle_error_with_recovery(
+                                error, 
+                                context=f"Command: {command}\nPython file not found error", 
+                                show_suggestion=True, 
+                                auto_mode=False
+                            )
+                            if should_retry:
+                                execute_command(command)
+                                return
             else:
                 # For non-interactive commands, capture output for logging
                 result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=None)
@@ -5550,13 +6152,15 @@ def execute_command(command: str):
                     error_text = result.stdout
                 
                 # Check if it's a "not found" type error in the actual error message
-                # Also check exit code 127 which typically means "command not found"
+                # Also check exit code 127 (command not found) and 2 (file not found in Python)
                 is_not_found = (
                     result.returncode == 127 or  # Standard "command not found" exit code
+                    result.returncode == 2 or  # Python "file not found" exit code
                     any(phrase in error_text.lower() for phrase in [
                         "no such file", "not found", "cannot find", "does not exist", 
                         "cannot access", "no existe", "cannot open", "command not found",
-                        "no such file or directory"
+                        "no such file or directory", "can't open file", "errno 2",
+                        "file not found", "file does not exist"
                     ])
                 )
                 
@@ -5624,6 +6228,170 @@ def execute_command(command: str):
                 execute_command(command)
                 return
     else:
+        # Check if it's a relative (./, ../, ..) or absolute (/, ~/) path before sending to AI
+        # Block invalid file extensions to prevent them from reaching AI
+        if cmd.startswith("./") or cmd.startswith("../") or cmd == ".." or cmd.startswith("/") or cmd.startswith("~/") or cmd == "~":
+            target_path = cmd
+            # Expand to full path if needed
+            if cmd == "..":
+                # Handle just .. (parent directory)
+                target_path = os.path.normpath(os.path.join(os.getcwd(), ".."))
+            elif cmd.startswith("./"):
+                target_path = os.path.join(os.getcwd(), cmd[2:])
+            elif cmd.startswith("../"):
+                # Handle parent directory paths (../folder, ../../folder, etc.)
+                target_path = os.path.normpath(os.path.join(os.getcwd(), cmd))
+            elif cmd == "~":
+                # Handle just ~ (home directory) - must check exact match first
+                target_path = os.path.expanduser(cmd)
+            elif cmd.startswith("~/"):
+                # Expand home directory (~/Documents/file.py)
+                target_path = os.path.expanduser(cmd)
+            # For absolute paths starting with /, use as-is
+            
+            # Path validation: Check for suspicious path traversal patterns BEFORE processing
+            # Count ../ in the original command string (before normalization)
+            if "../" in cmd:
+                parent_dir_count = cmd.count("../")
+                if parent_dir_count > 3:
+                    print_with_rich("⚠️  Warning: Suspicious path traversal detected!", "error")
+                    print_with_rich(f"   Too many parent directory references ({parent_dir_count} '../' found) in path.", "warning")
+                    print_with_rich("   This may be a security risk. Please use a more direct path.", "info")
+                    print_with_rich("   Maximum allowed: 3 levels (../../../)", "info")
+                    session.add_command(command, error="Suspicious path traversal detected")
+                    return
+            
+            # Check if path exists
+            if os.path.exists(target_path):
+                # Check if it's a directory
+                if os.path.isdir(target_path):
+                    # Change directory to the folder
+                    print_with_rich("📁 Changing directory...", "info")
+                    try:
+                        os.chdir(target_path)
+                        new_cwd = os.getcwd()
+                        print_with_rich(f"✅ Changed directory to: {new_cwd}", "success")
+                        session.add_command(command, f"Changed directory to {new_cwd}")
+                        return
+                    except Exception as e:
+                        print_with_rich(f"⚠️  Error changing directory: {e}", "error")
+                        session.add_command(command, error=str(e))
+                        return
+                
+                # It's a file - check if it's allowed (.py or .sh)
+                elif os.path.isfile(target_path):
+                    # Only allow Python and bash files - strict check for exact extensions
+                    # Check if file ends with exactly .py or .sh (not .pyc, .pyqw, etc.)
+                    if not (target_path.lower().endswith('.py') or target_path.lower().endswith('.sh')):
+                        file_ext = os.path.splitext(target_path)[1].lower()
+                        print_with_rich(f"⚠️  Warning: Only Python (.py) and bash (.sh) files can be executed with './', '../', '/', or '~/'", "error")
+                        print_with_rich(f"   File '{target_path}' has extension '{file_ext}' which is not allowed.", "warning")
+                        
+                        # Better error messages for different file types
+                        file_name = os.path.basename(target_path)
+                        suggestions = {
+                            '.txt': f"Use 'read_file {file_name}' or 'cat {file_name}' to read it",
+                            '.json': f"Use 'read_file {file_name}' to view it",
+                            '.md': f"Use 'read_file {file_name}' to view it",
+                            '.yml': f"Use 'read_file {file_name}' to view it",
+                            '.yaml': f"Use 'read_file {file_name}' to view it",
+                            '.xml': f"Use 'read_file {file_name}' to view it",
+                            '.html': f"Use 'read_file {file_name}' to view it",
+                            '.css': f"Use 'read_file {file_name}' to view it",
+                            '.js': f"Use 'read_file {file_name}' to view it or 'node {file_name}' to run it",
+                            '.ts': f"Use 'read_file {file_name}' to view it",
+                        }
+                        
+                        suggestion = suggestions.get(file_ext, f"Use 'read_file {file_name}' to view it or appropriate command for this file type")
+                        print_with_rich(f"   💡 {suggestion}", "info")
+                        print_with_rich("   For bash scripts: 'bash <script_file>' | For Python: 'python <script_file>'", "info")
+                        session.add_command(command, error=f"Invalid file extension: {file_ext}")
+                        return
+                    
+                    # Execute the file directly using subprocess
+                    file_ext = os.path.splitext(target_path)[1].lower()
+                    file_name = os.path.basename(target_path)
+                    if file_ext == '.py':
+                        print_with_rich(f"▶️  Executing Python script: {file_name}...", "info")
+                    else:
+                        print_with_rich(f"▶️  Executing bash script: {file_name}...", "info")
+                    
+                    start_time = time.time()
+                    try:
+                        if file_ext == '.py':
+                            # For Python files, use explicit python command for better interactive support
+                            python_cmd = f"python {command}" if not command.startswith("python") else command
+                            result = subprocess.run(python_cmd, shell=True, capture_output=False)
+                        else:
+                            # For bash files, execute with shell=True to handle shebangs properly
+                            result = subprocess.run(command, shell=True, capture_output=False)
+                        
+                        execution_time = time.time() - start_time
+                        
+                        # Show execution time for longer commands
+                        if execution_time > 1.0:
+                            print_with_rich(f"⏱️  Completed in {execution_time:.2f}s", "info")
+                        
+                        if result.returncode != 0:
+                            print_with_rich(f"Command exited with code {result.returncode}", "warning")
+                            session.add_command(command, error=f"Exited with code {result.returncode}")
+                        else:
+                            session.add_command(command, "Command completed successfully")
+                        return
+                    except Exception as e:
+                        print_with_rich(f"Error executing file: {e}", "error")
+                        session.add_command(command, error=str(e))
+                        return
+            else:
+                # Path doesn't exist - suggest similar files/folders and launch error recovery mode
+                error_msg = f"Path '{target_path}' not found"
+                print_with_rich(f"⚠️  Error: {error_msg}!", "error")
+                
+                # Suggest similar files/folders in the current directory
+                try:
+                    current_dir = os.path.dirname(target_path) if os.path.dirname(target_path) else os.getcwd()
+                    search_name = os.path.basename(target_path)
+                    
+                    if os.path.exists(current_dir):
+                        similar_items = []
+                        try:
+                            for item in os.listdir(current_dir):
+                                # Use fuzzy matching to find similar names
+                                import difflib
+                                similarity = difflib.SequenceMatcher(None, search_name.lower(), item.lower()).ratio()
+                                if similarity > 0.6:  # 60% similarity threshold
+                                    item_path = os.path.join(current_dir, item)
+                                    item_type = "📁" if os.path.isdir(item_path) else "📄"
+                                    similar_items.append((item, similarity, item_type))
+                        except (PermissionError, OSError):
+                            pass
+                        
+                        # Sort by similarity and show top 3
+                        if similar_items:
+                            similar_items.sort(key=lambda x: x[1], reverse=True)
+                            print_with_rich("   💡 Did you mean one of these?", "info")
+                            for item, similarity, item_type in similar_items[:3]:
+                                print_with_rich(f"      {item_type} {item} ({(similarity*100):.0f}% similar)", "default")
+                except Exception:
+                    pass  # Silently fail if suggestion fails
+                
+                session.add_command(command, error=error_msg)
+                
+                # Launch error recovery mode if AI is enabled
+                if AI_ENABLED:
+                    error = FileNotFoundError(error_msg)
+                    should_retry = handle_error_with_recovery(
+                        error, 
+                        context=f"Command: {command}\nTrying to access path: {target_path}", 
+                        show_suggestion=True, 
+                        auto_mode=False
+                    )
+                    if should_retry:
+                        # Retry the command
+                        execute_command(command)
+                        return
+                return
+        
         # Check if it's a complex command that might need AI interpretation
         if is_complex_command(command):
             # Send complex commands to AI for interpretation
@@ -6340,15 +7108,6 @@ def print_help():
                                 style="magenta italic"), 
                           border_style="magenta", title="AI Magic"))
     console.print("")
-    
-    # Footer with status
-    status_text = Text("🎆 STATUS: ALL CRITICAL BUGS FIXED - PRODUCTION READY!", style="bold green")
-    quick_start = Text("🚀 Quick Start: apikey openrouter <key> → model set ds1 → theme matrix → config", 
-                      style="yellow italic")
-    persistent_note = Text("💾 All settings (model, theme, apikey) persist automatically!", style="green bold")
-    
-    console.print(Panel.fit(Group(status_text, quick_start, persistent_note), 
-                          border_style="green", title="Ready to Go!"))
     
     # Helpful reminder
     console.print("\n💡 ", end="")
@@ -8078,7 +8837,7 @@ def _model_set(model_id: str):
     global MODEL, current_config, API_BASE
     
     if not current_config:
-        current_config = {"api_key": "", "model": "gemini-2.0-flash", "theme": "dark", "prompt_style": "classic"}
+        current_config = {"api_key": "", "model": "gemini-flash-latest", "theme": "dark", "prompt_style": "classic"}
     
     model_id = model_id.lower()
     
@@ -8248,7 +9007,7 @@ def theme_command(args: List[str]):
     global current_config
     
     if not current_config:
-        current_config = {"api_key": "", "model": "gemini-2.0-flash", "theme": "matrix", "prompt_style": "hacker"}
+        current_config = {"api_key": "", "model": "gemini-flash-latest", "theme": "matrix", "prompt_style": "hacker"}
     
     if not args:
         # Show available themes and current theme
@@ -8431,7 +9190,7 @@ def config_command(args: List[str]):
     global AI_ENABLED, MODEL, API_KEY, current_config, GEMINI_API_KEY
     
     if not current_config:
-        current_config = {"api_key": "", "model": "gemini-2.0-flash", "theme": "matrix", "prompt_style": "hacker"}
+        current_config = {"api_key": "", "model": "gemini-flash-latest", "theme": "matrix", "prompt_style": "hacker"}
     
     # Always show current configuration (no subcommands)
     print_with_rich("🔧 VritraAI Configuration", "success")
@@ -12050,7 +12809,7 @@ def apikey_command(args: List[str]):
         
         # Update config
         if not current_config:
-            current_config = load_config() or {"api_key": "", "model": "gemini-2.0-flash"}
+            current_config = load_config() or {"api_key": "", "model": "gemini-flash-latest"}
         current_config["api_key"] = API_KEY
         
         # Update AI_ENABLED if we're using OpenRouter
@@ -12106,7 +12865,7 @@ def apikey_command(args: List[str]):
         
         # Update config
         if not current_config:
-            current_config = load_config() or {"api_key": "", "model": "gemini-2.0-flash"}
+            current_config = load_config() or {"api_key": "", "model": "gemini-flash-latest"}
         current_config["gemini_api_key"] = GEMINI_API_KEY
         
         # Update AI_ENABLED if we're using Gemini
@@ -12168,7 +12927,7 @@ def apikey_command(args: List[str]):
                     API_KEY = ""
                     
                     if not current_config:
-                        current_config = load_config() or {"api_key": "", "model": "gemini-2.0-flash"}
+                        current_config = load_config() or {"api_key": "", "model": "gemini-flash-latest"}
                     current_config["api_key"] = ""
                     
                     # Update AI_ENABLED if OpenRouter is active
@@ -12203,7 +12962,7 @@ def apikey_command(args: List[str]):
                     GEMINI_API_KEY = ""
                     
                     if not current_config:
-                        current_config = load_config() or {"api_key": "", "model": "gemini-2.0-flash"}
+                        current_config = load_config() or {"api_key": "", "model": "gemini-flash-latest"}
                     current_config["gemini_api_key"] = ""
                     
                     # Update AI_ENABLED if Gemini is active
@@ -12240,7 +12999,7 @@ def apikey_command(args: List[str]):
                     AI_ENABLED = False
                     
                     if not current_config:
-                        current_config = load_config() or {"api_key": "", "model": "gemini-2.0-flash"}
+                        current_config = load_config() or {"api_key": "", "model": "gemini-flash-latest"}
                     current_config["api_key"] = ""
                     current_config["gemini_api_key"] = ""
                     current_config["ai_enabled"] = False
@@ -12380,7 +13139,7 @@ def api_base_command(args: List[str]):
         config["api_base"] = "gemini"
         
         # Restore or set Gemini model
-        last_gemini_model = config.get("last_gemini_model", "gemini-2.0-flash")
+        last_gemini_model = config.get("last_gemini_model", "gemini-flash-latest")
         
         # Only switch model if current model is an OpenRouter model
         if MODEL not in [m["name"] for m in GEMINI_MODELS.values()]:
@@ -13830,7 +14589,7 @@ def show_motd():
 
 # --- Version Info and What's New ---
 def extract_version_number(version_str: str) -> tuple:
-    """Extract version number from version string (e.g., 'v0.29.5' -> (0, 29, 5))"""
+    """Extract version number from version string (e.g., 'v0.30.0' -> (0, 30, 0))"""
     try:
         # Remove 'v' prefix if present
         version_str = version_str.lstrip('vV')
